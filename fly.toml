@@ -1,0 +1,18 @@
+app = 'movie-downloader'
+primary_region = 'nrt'
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[checks]
+  [checks.alive]
+    type = 'tcp'
+    port = 8080
+    interval = '15s'
+    timeout = '2s'

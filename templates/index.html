@@ -273,12 +273,32 @@
             <label><input type="checkbox" id="embed-sub-${idx}" checked> 動画に埋め込む</label>
           </div>
           ` : ""}
+          <div class="options-row">
+            <label><input type="checkbox" id="gen-sub-${idx}"> Whisperで字幕を生成する</label>
+            <select id="whisper-lang-${idx}" style="max-width:120px; display:none;">
+              <option value="">自動検出</option>
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+            </select>
+          </div>
           <div class="format-select">
             <button class="btn-download" id="dl-btn-${idx}" onclick="downloadVideo('${escapeHtml(url)}', ${idx})">ダウンロード</button>
           </div>
           <div class="dl-status" id="dl-status-${idx}"></div>
         `;
         results.appendChild(card);
+
+        // Whisperチェックボックスで言語選択の表示切替
+        const genSubCheck = document.getElementById(`gen-sub-${idx}`);
+        const whisperLangSelect = document.getElementById(`whisper-lang-${idx}`);
+        genSubCheck.addEventListener("change", () => {
+          whisperLangSelect.style.display = genSubCheck.checked ? "" : "none";
+        });
       });
     }
 
@@ -286,20 +306,31 @@
       const formatSelect = document.getElementById(`fmt-${idx}`);
       const subSelect = document.getElementById(`sub-${idx}`);
       const embedCheck = document.getElementById(`embed-sub-${idx}`);
+      const genSubCheck = document.getElementById(`gen-sub-${idx}`);
+      const whisperLangSelect = document.getElementById(`whisper-lang-${idx}`);
       const btn = document.getElementById(`dl-btn-${idx}`);
       const status = document.getElementById(`dl-status-${idx}`);
       const formatId = formatSelect.value;
       const subtitleLang = subSelect ? subSelect.value : "";
       const embedSubs = embedCheck ? embedCheck.checked : false;
+      const generateSubs = genSubCheck ? genSubCheck.checked : false;
+      const whisperLang = whisperLangSelect ? whisperLangSelect.value : "";
 
       btn.disabled = true;
-      status.textContent = "ダウンロード中...（時間がかかる場合があります）";
+      const msg = generateSubs
+        ? "ダウンロード＆字幕生成中...（時間がかかります）"
+        : "ダウンロード中...（時間がかかる場合があります）";
+      status.textContent = msg;
 
       try {
         const res = await fetch("/api/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, format_id: formatId, subtitle_lang: subtitleLang, embed_subs: embedSubs }),
+          body: JSON.stringify({
+            url, format_id: formatId,
+            subtitle_lang: subtitleLang, embed_subs: embedSubs,
+            generate_subs: generateSubs, whisper_lang: whisperLang,
+          }),
         });
         const data = await res.json();
 

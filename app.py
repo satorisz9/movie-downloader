@@ -1,6 +1,8 @@
 import os
 import uuid
 import shutil
+import subprocess
+import tempfile
 from flask import Flask, render_template, request, jsonify, send_file
 import yt_dlp
 
@@ -106,6 +108,8 @@ def download_video():
     format_id = request.json.get("format_id", "").strip()
     subtitle_lang = request.json.get("subtitle_lang", "").strip()
     embed_subs = request.json.get("embed_subs", False)
+    generate_subs = request.json.get("generate_subs", False)
+    whisper_lang = request.json.get("whisper_lang", "").strip()
     if not url:
         return jsonify({"error": "URLを入力してください"}), 400
 
@@ -147,13 +151,70 @@ def download_video():
         return jsonify({"error": f"ダウンロードに失敗しました: {e}"}), 400
 
     # ダウンロードされたファイルを探す
-    files = os.listdir(task_dir)
+    files = [f for f in os.listdir(task_dir) if not f.endswith((".srt", ".vtt", ".ass"))]
     if not files:
         shutil.rmtree(task_dir, ignore_errors=True)
         return jsonify({"error": "ファイルが見つかりません"}), 500
 
-    filepath = os.path.join(task_dir, files[0])
-    return jsonify({"task_id": task_id, "filename": files[0]})
+    video_file = files[0]
+    video_path = os.path.join(task_dir, video_file)
+
+    # Whisperで字幕生成
+    if generate_subs:
+        try:
+            video_path = _generate_subtitles(video_path, task_dir, whisper_lang)
+            video_file = os.path.basename(video_path)
+        except Exception as e:
+            return jsonify({"error": f"字幕生成に失敗しました: {e}"}), 500
+
+    return jsonify({"task_id": task_id, "filename": video_file})
+
+
+def _generate_subtitles(video_path, task_dir, lang):
+    """Whisperで音声から字幕を生成し、動画に埋め込む"""
+    import whisper
+
+    model = whisper.load_model("base")
+
+    transcribe_opts = {}
+    if lang:
+        transcribe_opts["language"] = lang
+
+    result = model.transcribe(video_path, **transcribe_opts)
+
+    # SRTファイルを生成
+    srt_path = os.path.join(task_dir, "generated.srt")
+    with open(srt_path, "w", encoding="utf-8") as f:
+        for i, seg in enumerate(result["segments"], 1):
+            start = _format_srt_time(seg["start"])
+            end = _format_srt_time(seg["end"])
+            text = seg["text"].strip()
+            f.write(f"{i}\n{start} --> {end}\n{text}\n\n")
+
+    # ffmpegで字幕を動画に埋め込む
+    base, ext = os.path.splitext(video_path)
+    output_path = base + "_sub.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-i", video_path, "-i", srt_path,
+            "-c", "copy", "-c:s", "mov_text",
+            "-metadata:s:s:0", f"language={lang or 'und'}",
+            "-y", output_path,
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    return output_path
+
+
+def _format_srt_time(seconds):
+    """秒数をSRT形式の時間文字列に変換する"""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int((seconds % 1) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
 @app.route("/api/file/<task_id>/<filename>")

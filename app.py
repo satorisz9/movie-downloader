@@ -8,7 +8,8 @@ import yt_dlp
 
 app = Flask(__name__)
 
-DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "downloads")
+IS_VERCEL = os.environ.get("VERCEL", "") == "1"
+DOWNLOAD_DIR = os.path.join("/tmp", "downloads") if IS_VERCEL else os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 

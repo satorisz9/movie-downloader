@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>動画ダウンローダー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 28px;
+      margin-bottom: 32px;
+      color: #fff;
+    }
+    .search-box {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .search-box input {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 16px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #1a1a1a;
+      color: #fff;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box input:focus {
+      border-color: #5b9bd5;
+    }
+    .search-box button {
+      padding: 12px 24px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #5b9bd5;
+      color: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+    .search-box button:hover { background: #4a8ac4; }
+    .search-box button:disabled {
+      background: #333;
+      cursor: not-allowed;
+    }
+    .status {
+      text-align: center;
+      padding: 16px;
+      color: #aaa;
+    }
+    .error {
+      background: #3a1a1a;
+      border: 1px solid #6a2a2a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #f88;
+      margin-bottom: 16px;
+    }
+    .video-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .video-header {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .video-header img {
+      width: 160px;
+      height: 90px;
+      object-fit: cover;
+      border-radius: 8px;
+      background: #222;
+    }
+    .video-header .info {
+      flex: 1;
+    }
+    .video-header .info h3 {
+      font-size: 16px;
+      margin-bottom: 4px;
+      color: #fff;
+    }
+    .video-header .info .duration {
+      font-size: 13px;
+      color: #888;
+    }
+    .options-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .options-row select {
+      flex: 1;
+      min-width: 160px;
+      padding: 8px 12px;
+      font-size: 14px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #222;
+      color: #e0e0e0;
+      outline: none;
+    }
+    .options-row label {
+      font-size: 13px;
+      color: #bbb;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .options-row input[type="checkbox"] {
+      accent-color: #5b9bd5;
+    }
+    .format-select {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .btn-download {
+      padding: 8px 20px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      background: #2ea043;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-download:hover { background: #278a38; }
+    .btn-download:disabled {
+      background: #333;
+      cursor: not-allowed;
+    }
+    .dl-status {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #aaa;
+    }
+    @media (max-width: 600px) {
+      .video-header { flex-direction: column; }
+      .video-header img { width: 100%; height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>動画ダウンローダー</h1>
+
+    <div class="search-box">
+      <input type="url" id="url-input" placeholder="動画のURLを入力..." autofocus>
+      <button id="fetch-btn" onclick="fetchInfo()">取得</button>
+    </div>
+
+    <div id="error-area"></div>
+    <div id="status-area"></div>
+    <div id="results"></div>
+  </div>
+
+  <script>
+    const urlInput = document.getElementById("url-input");
+    const fetchBtn = document.getElementById("fetch-btn");
+    const errorArea = document.getElementById("error-area");
+    const statusArea = document.getElementById("status-area");
+    const results = document.getElementById("results");
+
+    urlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") fetchInfo();
+    });
+
+    async function fetchInfo() {
+      const url = urlInput.value.trim();
+      if (!url) return;
+
+      errorArea.innerHTML = "";
+      results.innerHTML = "";
+      statusArea.innerHTML = '<div class="status">動画情報を取得中...</div>';
+      fetchBtn.disabled = true;
+
+      try {
+        const res = await fetch("/api/info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorArea.innerHTML = `<div class="error">${escapeHtml(data.error)}</div>`;
+          statusArea.innerHTML = "";
+          return;
+        }
+
+        statusArea.innerHTML = "";
+        renderResults(data, url);
+      } catch (e) {
+        errorArea.innerHTML = `<div class="error">通信エラーが発生しました</div>`;
+        statusArea.innerHTML = "";
+      } finally {
+        fetchBtn.disabled = false;
+      }
+    }
+
+    function renderResults(data, url) {
+      results.innerHTML = "";
+      const entries = data.entries || [];
+      if (entries.length === 0) {
+        results.innerHTML = '<div class="status">動画が見つかりませんでした</div>';
+        return;
+      }
+
+      entries.forEach((entry, idx) => {
+        const card = document.createElement("div");
+        card.className = "video-card";
+
+        const durationStr = entry.duration
+          ? formatDuration(entry.duration)
+          : "";
+
+        let formatOptions = '<option value="">おまかせ (最高画質)</option>';
+        entry.formats.forEach((f) => {
+          formatOptions += `<option value="${escapeHtml(f.format_id)}">${escapeHtml(f.label)}</option>`;
+        });
+
+        // 字幕オプション
+        let subtitleOptions = '<option value="">なし</option>';
+        const subs = entry.subtitles || {};
+        const sortedLangs = Object.keys(subs).sort((a, b) => {
+          if (subs[a].auto !== subs[b].auto) return subs[a].auto ? 1 : -1;
+          return a.localeCompare(b);
+        });
+        sortedLangs.forEach((lang) => {
+          const s = subs[lang];
+          const autoLabel = s.auto ? " (自動生成)" : "";
+          subtitleOptions += `<option value="${escapeHtml(lang)}">${escapeHtml(lang)}${autoLabel}</option>`;
+        });
+        const hasSubtitles = sortedLangs.length > 0;
+
+        card.innerHTML = `
+          <div class="video-header">
+            ${entry.thumbnail ? `<img src="${escapeHtml(entry.thumbnail)}" alt="">` : ""}
+            <div class="info">
+              <h3>${escapeHtml(entry.title)}</h3>
+              ${durationStr ? `<span class="duration">${durationStr}</span>` : ""}
+            </div>
+          </div>
+          <div class="options-row">
+            <select id="fmt-${idx}">${formatOptions}</select>
+          </div>
+          ${hasSubtitles ? `
+          <div class="options-row">
+            <select id="sub-${idx}">${subtitleOptions}</select>
+            <label><input type="checkbox" id="embed-sub-${idx}" checked> 動画に埋め込む</label>
+          </div>
+          ` : ""}
+          <div class="options-row">
+            <label><input type="checkbox" id="gen-sub-${idx}"> Whisperで字幕を生成する</label>
+            <select id="whisper-lang-${idx}" style="max-width:120px; display:none;">
+              <option value="">自動検出</option>
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+            </select>
+          </div>
+          <div class="format-select">
+            <button class="btn-download" id="dl-btn-${idx}" onclick="downloadVideo('${escapeHtml(url)}', ${idx})">ダウンロード</button>
+          </div>
+          <div class="dl-status" id="dl-status-${idx}"></div>
+        `;
+        results.appendChild(card);
+
+        // Whisperチェックボックスで言語選択の表示切替
+        const genSubCheck = document.getElementById(`gen-sub-${idx}`);
+        const whisperLangSelect = document.getElementById(`whisper-lang-${idx}`);
+        genSubCheck.addEventListener("change", () => {
+          whisperLangSelect.style.display = genSubCheck.checked ? "" : "none";
+        });
+      });
+    }
+
+    async function downloadVideo(url, idx) {
+      const formatSelect = document.getElementById(`fmt-${idx}`);
+      const subSelect = document.getElementById(`sub-${idx}`);
+      const embedCheck = document.getElementById(`embed-sub-${idx}`);
+      const genSubCheck = document.getElementById(`gen-sub-${idx}`);
+      const whisperLangSelect = document.getElementById(`whisper-lang-${idx}`);
+      const btn = document.getElementById(`dl-btn-${idx}`);
+      const status = document.getElementById(`dl-status-${idx}`);
+      const formatId = formatSelect.value;
+      const subtitleLang = subSelect ? subSelect.value : "";
+      const embedSubs = embedCheck ? embedCheck.checked : false;
+      const generateSubs = genSubCheck ? genSubCheck.checked : false;
+      const whisperLang = whisperLangSelect ? whisperLangSelect.value : "";
+
+      btn.disabled = true;
+      const msg = generateSubs
+        ? "ダウンロード＆字幕生成中...（時間がかかります）"
+        : "ダウンロード中...（時間がかかる場合があります）";
+      status.textContent = msg;
+
+      try {
+        const res = await fetch("/api/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url, format_id: formatId,
+            subtitle_lang: subtitleLang, embed_subs: embedSubs,
+            generate_subs: generateSubs, whisper_lang: whisperLang,
+          }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          status.textContent = data.error || "エラーが発生しました";
+          status.style.color = "#f88";
+          return;
+        }
+
+        status.textContent = "完了！ダウンロードを開始します...";
+        status.style.color = "#2ea043";
+
+        // ファイルをダウンロード
+        const a = document.createElement("a");
+        a.href = `/api/file/${data.task_id}/${encodeURIComponent(data.filename)}`;
+        a.download = data.filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (e) {
+        status.textContent = "通信エラーが発生しました";
+        status.style.color = "#f88";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function formatDuration(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

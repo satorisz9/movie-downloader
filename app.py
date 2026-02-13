@@ -159,11 +159,11 @@ def download_video():
     _apply_cookies(ydl_opts)
 
     if format_id:
-        # 映像のみフォーマットの場合、音声もマージ
-        ydl_opts["format"] = f"{format_id}+bestaudio/best/{format_id}"
+        # 映像のみフォーマットの場合、音声もマージ（複数フォールバック付き）
+        ydl_opts["format"] = f"{format_id}+bestaudio/{format_id}/bestvideo+bestaudio/best"
         ydl_opts["merge_output_format"] = "mp4"
     else:
-        ydl_opts["format"] = "best"
+        ydl_opts["format"] = "bestvideo+bestaudio/best"
 
     # 字幕の設定
     if subtitle_lang:

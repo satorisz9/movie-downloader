@@ -10,12 +10,43 @@ app = Flask(__name__)
 
 IS_VERCEL = os.environ.get("VERCEL", "") == "1"
 DOWNLOAD_DIR = os.path.join("/tmp", "downloads") if IS_VERCEL else os.path.join(os.path.dirname(__file__), "downloads")
+COOKIE_FILE = os.path.join("/tmp" if IS_VERCEL else os.path.dirname(__file__), "cookies.txt")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+def _apply_cookies(opts):
+    """Cookie ファイルが存在すれば yt-dlp オプションに追加する"""
+    if os.path.isfile(COOKIE_FILE):
+        opts["cookiefile"] = COOKIE_FILE
+
+
+@app.route("/api/cookies", methods=["POST"])
+def upload_cookies():
+    """cookies.txt をアップロードする"""
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "ファイルが選択されていません"}), 400
+    f.save(COOKIE_FILE)
+    return jsonify({"ok": True, "message": "Cookieファイルを保存しました"})
+
+
+@app.route("/api/cookies", methods=["DELETE"])
+def delete_cookies():
+    """保存済み cookies.txt を削除する"""
+    if os.path.isfile(COOKIE_FILE):
+        os.remove(COOKIE_FILE)
+    return jsonify({"ok": True, "message": "Cookieファイルを削除しました"})
+
+
+@app.route("/api/cookies", methods=["GET"])
+def cookies_status():
+    """Cookie ファイルの有無を返す"""
+    return jsonify({"exists": os.path.isfile(COOKIE_FILE)})
 
 
 @app.route("/api/info", methods=["POST"])
@@ -33,6 +64,7 @@ def video_info():
         "writeautomaticsub": True,
         "subtitleslangs": ["all"],
     }
+    _apply_cookies(ydl_opts)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -124,13 +156,14 @@ def download_video():
         "outtmpl": os.path.join(task_dir, "%(title).80s.%(ext)s"),
         "noplaylist": True,
     }
+    _apply_cookies(ydl_opts)
 
     if format_id:
-        # 映像のみフォーマットの場合、音声もマージ
-        ydl_opts["format"] = f"{format_id}+bestaudio/best/{format_id}"
+        # 映像のみフォーマットの場合、音声もマージ（複数フォールバック付き）
+        ydl_opts["format"] = f"{format_id}+bestaudio/{format_id}/bestvideo+bestaudio/best"
         ydl_opts["merge_output_format"] = "mp4"
     else:
-        ydl_opts["format"] = "best"
+        ydl_opts["format"] = "bestvideo+bestaudio/best"
 
     # 字幕の設定
     if subtitle_lang:

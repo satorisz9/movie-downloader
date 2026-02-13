@@ -58,6 +58,31 @@
       background: #333;
       cursor: not-allowed;
     }
+    .cookie-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #aaa;
+    }
+    .cookie-bar .badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .badge-on { background: #1a3a1a; color: #4caf50; border: 1px solid #2e5a2e; }
+    .badge-off { background: #2a2a2a; color: #888; border: 1px solid #333; }
+    .cookie-bar button {
+      padding: 4px 12px;
+      font-size: 12px;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #222;
+      color: #ccc;
+      cursor: pointer;
+    }
+    .cookie-bar button:hover { background: #333; }
     .status {
       text-align: center;
       padding: 16px;
@@ -167,6 +192,14 @@
   <div class="container">
     <h1>動画ダウンローダー</h1>
 
+    <div class="cookie-bar">
+      <span>Cookie認証:</span>
+      <span class="badge badge-off" id="cookie-badge">未設定</span>
+      <button onclick="document.getElementById('cookie-file').click()">cookies.txtをアップロード</button>
+      <button id="cookie-delete-btn" onclick="deleteCookie()" style="display:none">削除</button>
+      <input type="file" id="cookie-file" accept=".txt" style="display:none" onchange="uploadCookie(this)">
+    </div>
+
     <div class="search-box">
       <input type="url" id="url-input" placeholder="動画のURLを入力..." autofocus>
       <button id="fetch-btn" onclick="fetchInfo()">取得</button>
@@ -187,6 +220,49 @@
     urlInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") fetchInfo();
     });
+
+    // Cookie管理
+    const cookieBadge = document.getElementById("cookie-badge");
+    const cookieDeleteBtn = document.getElementById("cookie-delete-btn");
+
+    async function checkCookieStatus() {
+      try {
+        const res = await fetch("/api/cookies");
+        const data = await res.json();
+        if (data.exists) {
+          cookieBadge.textContent = "設定済み";
+          cookieBadge.className = "badge badge-on";
+          cookieDeleteBtn.style.display = "";
+        } else {
+          cookieBadge.textContent = "未設定";
+          cookieBadge.className = "badge badge-off";
+          cookieDeleteBtn.style.display = "none";
+        }
+      } catch {}
+    }
+
+    async function uploadCookie(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const res = await fetch("/api/cookies", { method: "POST", body: form });
+        const data = await res.json();
+        if (res.ok) checkCookieStatus();
+        else alert(data.error || "アップロードに失敗しました");
+      } catch { alert("通信エラー"); }
+      input.value = "";
+    }
+
+    async function deleteCookie() {
+      try {
+        await fetch("/api/cookies", { method: "DELETE" });
+        checkCookieStatus();
+      } catch {}
+    }
+
+    checkCookieStatus();
 
     async function fetchInfo() {
       const url = urlInput.value.trim();
